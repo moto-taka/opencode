@@ -1,0 +1,332 @@
+name: PR Code Review with OpenCode
+
+on:
+  pull_request:
+    
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  code-review:
+    runs-on: ubuntu-latest
+    
+    steps:
+    # ========================================
+    # 1. Backlog URLの存在チェック
+    # ========================================
+    - name: Backlogチケット URLの確認
+      id: check-backlog
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const pr = context.payload.pull_request;
+          const description = pr.body || '';
+          
+          // PR説明文にBacklog URLが含まれているかチェック
+          // 形式: https://任意のサブドメイン.backlog.com
+          const backlogUrlPattern = /https?:\/\/[a-zA-Z0-9\-]+\.backlog\.com/;
+          const hasBacklogUrl = backlogUrlPattern.test(description);
+          
+          if (!hasBacklogUrl) {
+            core.setOutput('has_backlog_url', 'false');
+            console.log('Backlog URLが見つかりません。コードレビューをスキップします。');
+          } else {
+            core.setOutput('has_backlog_url', 'true');
+            console.log('Backlog URLを確認しました。コードレビューを開始します。');
+          }
+    
+    # ========================================
+    # 2. リポジトリのチェックアウト
+    # ========================================
+    - name: リポジトリのチェックアウト
+      if: steps.check-backlog.outputs.has_backlog_url == 'true'
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 完全な履歴を取得（差分計算のため）
+        
+    # ========================================
+    # 3. 開発環境のセットアップ
+    # ========================================
+    # Go環境のセットアップ（OpenCodeのインストールに必要）
+    - name: Go環境のセットアップ
+      if: steps.check-backlog.outputs.has_backlog_url == 'true'
+      uses: actions/setup-go@v5
+      with:
+        go-version: '>=1.23.2'
+        
+    # Go バイナリのキャッシュ
+    - name: Go バイナリのキャッシュ
+      if: steps.check-backlog.outputs.has_backlog_url == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/go/bin
+        key: ${{ runner.os }}-go-bin-opencode-moto-taka-v1.0.0
+        restore-keys: |
+          ${{ runner.os }}-go-bin-opencode-moto-taka-
+    
+    # 修正版OpenCodeのインストール
+    - name: 修正版OpenCodeのインストール
+      if: steps.check-backlog.outputs.has_backlog_url == 'true'
+      run: |
+        if ! command -v opencode &> /dev/null; then
+          echo "修正版OpenCodeをインストール中..."
+          go install github.com/moto-taka/opencode@latest
+        else
+          echo "OpenCodeは既にインストールされています"
+        fi
+        echo "$HOME/go/bin" >> $GITHUB_PATH
+        
+    # Node.js環境のセットアップ（MCPサーバーの実行に必要）
+    - name: Node.js環境のセットアップ（MCP用）
+      if: steps.check-backlog.outputs.has_backlog_url == 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install fzf
+      if: steps.check-backlog.outputs.has_backlog_url == 'true'
+      run: |
+        # fzf のリポジトリをクローン
+        git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+        
+        # fzf をインストール（非対話式）
+        ~/.fzf/install --all --no-update-rc
+        
+        # fzf が正常にインストールされたことを確認
+        echo "fzf version:"
+        ~/.fzf/bin/fzf --version
+
+    - name: Verify fzf installation
+      if: steps.check-backlog.outputs.has_backlog_url == 'true'
+      run: |
+        # PATH に fzf を追加
+        export PATH="$HOME/.fzf/bin:$PATH"
+        
+    # ========================================
+    # 5. OpenCodeとMCPの設定
+    # ========================================
+    - name: OpenCodeとMCPの設定
+      if: steps.check-backlog.outputs.has_backlog_url == 'true'
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        BACKLOG_API_KEY: ${{ secrets.BACKLOG_API_KEY }}
+        FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+        FIGMA_API_KEY: ${{ secrets.FIGMA_API_KEY }}
+        BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+        GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_PERSONAL_ACCESS_TOKEN }}
+      run: |
+        echo "OpenCodeの設定ファイルを作成中..."
+        
+        # 設定ディレクトリの作成
+        mkdir -p ~/.config/opencode
+        
+        # OpenCode設定ファイル（修正版用）
+        cat > ~/.opencode.json << 'EOFJSON'
+        {
+          "providers": {
+            "openrouter": {
+              "apiKey": "${OPENROUTER_API_KEY}",
+              "disabled": false
+            }
+          },
+          "agents": {
+            "coder": {
+              "model": "openrouter.claude-4-sonnet",
+              "maxTokens": 30000
+            },
+            "task": {
+              "model": "openrouter.claude-4-sonnet", 
+              "maxTokens": 30000
+            },
+            "title": {
+              "model": "openrouter.claude-4-sonnet",
+              "maxTokens": 80
+            }
+          },
+          "mcpServers": {
+            "backlog": {
+              "command": "docker",
+              "args": [
+                "run",
+                "--pull",
+                "always",
+                "-i",
+                "--rm",
+                "-e",
+                "BACKLOG_DOMAIN",
+                "-e",
+                "BACKLOG_API_KEY",
+                "ghcr.io/nulab/backlog-mcp-server"
+              ],
+              "env": [
+                "BACKLOG_DOMAIN=0rchestra.backlog.com",
+                "BACKLOG_API_KEY=${BACKLOG_API_KEY}"
+              ]
+            },
+            "firecrawl": {
+              "command": "npx",
+              "args": [
+                "-y",
+                "firecrawl-mcp"
+              ],
+              "env": [
+                "FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}",
+                "FIRECRAWL_RETRY_MAX_ATTEMPTS=5",
+                "FIRECRAWL_RETRY_INITIAL_DELAY=2000",
+                "FIRECRAWL_RETRY_MAX_DELAY=30000",
+                "FIRECRAWL_RETRY_BACKOFF_FACTOR=3",
+                "FIRECRAWL_CREDIT_WARNING_THRESHOLD=2000",
+                "FIRECRAWL_CREDIT_CRITICAL_THRESHOLD=500"
+              ],
+              "alwaysAllow": [
+                "firecrawl_scrape",
+                "firecrawl_map",
+                "firecrawl_crawl",
+                "firecrawl_check_crawl_status",
+                "firecrawl_search",
+                "firecrawl_extract",
+                "firecrawl_deep_research",
+                "firecrawl_generate_llmstxt"
+              ]
+            },
+            "figma-developer-mcp": {
+              "command": "npx",
+              "args": [
+                "-y",
+                "figma-developer-mcp",
+                "--figma-api-key=${FIGMA_API_KEY}",
+                "--stdio"
+              ],
+              "alwaysAllow": [
+                "download_figma_images",
+                "get_figma_data"
+              ],
+              "timeout": 300
+            },
+            "braveSearch": {
+              "command": "npx",
+              "args": [
+                "-y",
+                "@modelcontextprotocol/server-brave-search"
+              ],
+              "env": [
+                "BRAVE_API_KEY=${BRAVE_API_KEY}"
+              ],
+              "alwaysAllow": [
+                "brave_web_search",
+                "brave_local_search"
+              ]
+            },
+            "context7": {
+              "command": "npx",
+              "args": [
+                "-y",
+                "@upstash/context7-mcp@latest"
+              ],
+              "env": [
+                "DEFAULT_MINIMUM_TOKENS=1000"
+              ]
+            },
+            "github": {
+              "command": "docker",
+              "args": [
+                "run",
+                "-i",
+                "--rm",
+                "-e",
+                "GITHUB_PERSONAL_ACCESS_TOKEN",
+                "ghcr.io/github/github-mcp-server"
+              ],
+              "env": [
+                "GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_PERSONAL_ACCESS_TOKEN}"
+              ],
+              "alwaysAllow": [
+                "list_branches",
+                "search_repositories",
+                "get_pull_request",
+                "create_issue",
+                "list_issues",
+                "create_or_update_file",
+                "push_files",
+                "get_file_contents",
+                "create_pull_request",
+                "fork_repository",
+                "create_branch",
+                "list_commits",
+                "update_issue",
+                "add_issue_comment",
+                "search_code",
+                "search_issues",
+                "search_users",
+                "get_issue",
+                "create_pull_request_review",
+                "get_me"
+              ]
+            },
+            "sequential-thinking": {
+              "command": "npx",
+              "args": [
+                "-y",
+                "@modelcontextprotocol/server-sequential-thinking"
+              ],
+              "alwaysAllow": [
+                "sequentialthinking"
+              ]
+            }
+          }
+        }
+EOFJSON
+        
+        # 環境変数の置換
+        sed -i "s/\${OPENROUTER_API_KEY}/$OPENROUTER_API_KEY/g" ~/.opencode.json
+        sed -i "s/\${BACKLOG_API_KEY}/$BACKLOG_API_KEY/g" ~/.opencode.json
+        sed -i "s/\${FIRECRAWL_API_KEY}/$FIRECRAWL_API_KEY/g" ~/.opencode.json
+        sed -i "s/\${FIGMA_API_KEY}/$FIGMA_API_KEY/g" ~/.opencode.json
+        sed -i "s/\${BRAVE_API_KEY}/$BRAVE_API_KEY/g" ~/.opencode.json
+        sed -i "s/\${GITHUB_PERSONAL_ACCESS_TOKEN}/$GITHUB_PERSONAL_ACCESS_TOKEN/g" ~/.opencode.json
+        
+        echo "設定ファイルの作成が完了しました"
+        
+    # ========================================
+    # 6. OpenCodeによるコードレビューの実行
+    # ========================================
+    - name: OpenCodeによるコードレビューの実行
+      if: steps.check-backlog.outputs.has_backlog_url == 'true'
+      run: |
+        opencode -p "あなたは経験豊富なコードレビュアーです。PR ${{ github.event.pull_request.html_url }} に対して以下の手順で体系的なレビューを実施してください。
+
+        ## 準備フェーズ
+        1. review.example.md のコードレビューガイドラインを熟読し、レビュー基準を理解する
+        2. GitHub MCPを使用してPRの全体像を把握:
+           - 変更ファイル一覧とdiff
+           - PR説明文の内容
+           - 既存のコメントやレビュー履歴
+
+        ## 要件確認フェーズ
+        3. Backlog MCPでチケット情報を取得し、実装要件を確認
+        4. FigmaのURLが含まれる場合、Figma MCPでデザイン仕様を確認
+        5. 不明な点があればFirecrawl MCPで関連ドキュメントを検索
+
+        ## コードレビューフェーズ
+        6. 以下の観点で詳細にレビュー:
+           - デザイン: Figmaのデザインと実装の整合性
+           - 機能要件: Backlogチケットの要件に対する実装の適合性
+           - 型安全性: any型の使用、適切な型定義
+           - 命名規則: 明確で意味のある変数名・関数名
+           - パフォーマンス: 不要な再レンダリング、N+1問題
+           - セキュリティ: 認証・認可、入力検証
+           - エラーハンドリング: 適切な例外処理
+           - コード品質: DRY原則、可読性、保守性
+
+        7. パッケージ固有の実装については、Context7 MCPで最新のベストプラクティスを確認
+
+        ## フィードバックフェーズ
+        8. 発見した問題は該当行に具体的な改善提案と共にコメント
+        9. 良い実装があれば積極的に褒めるコメントも追加
+        10. 全ての指摘事項が解決され、要件を満たしている場合のみApprove
+
+        重要: レビューは建設的で教育的なトーンを保ち、なぜその変更が必要かを説明してください。"

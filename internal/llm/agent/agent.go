@@ -8,16 +8,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/opencode-ai/opencode/internal/config"
-	"github.com/opencode-ai/opencode/internal/llm/models"
-	"github.com/opencode-ai/opencode/internal/llm/prompt"
-	"github.com/opencode-ai/opencode/internal/llm/provider"
-	"github.com/opencode-ai/opencode/internal/llm/tools"
-	"github.com/opencode-ai/opencode/internal/logging"
-	"github.com/opencode-ai/opencode/internal/message"
-	"github.com/opencode-ai/opencode/internal/permission"
-	"github.com/opencode-ai/opencode/internal/pubsub"
-	"github.com/opencode-ai/opencode/internal/session"
+	"github.com/moto-taka/opencode/internal/config"
+	"github.com/moto-taka/opencode/internal/llm/models"
+	"github.com/moto-taka/opencode/internal/llm/prompt"
+	"github.com/moto-taka/opencode/internal/llm/provider"
+	"github.com/moto-taka/opencode/internal/llm/tools"
+	"github.com/moto-taka/opencode/internal/logging"
+	"github.com/moto-taka/opencode/internal/message"
+	"github.com/moto-taka/opencode/internal/permission"
+	"github.com/moto-taka/opencode/internal/pubsub"
+	"github.com/moto-taka/opencode/internal/session"
 )
 
 // Common errors

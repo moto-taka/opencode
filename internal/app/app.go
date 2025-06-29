@@ -9,17 +9,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/opencode-ai/opencode/internal/config"
-	"github.com/opencode-ai/opencode/internal/db"
-	"github.com/opencode-ai/opencode/internal/format"
-	"github.com/opencode-ai/opencode/internal/history"
-	"github.com/opencode-ai/opencode/internal/llm/agent"
-	"github.com/opencode-ai/opencode/internal/logging"
-	"github.com/opencode-ai/opencode/internal/lsp"
-	"github.com/opencode-ai/opencode/internal/message"
-	"github.com/opencode-ai/opencode/internal/permission"
-	"github.com/opencode-ai/opencode/internal/session"
-	"github.com/opencode-ai/opencode/internal/tui/theme"
+	"github.com/moto-taka/opencode/internal/config"
+	"github.com/moto-taka/opencode/internal/db"
+	"github.com/moto-taka/opencode/internal/format"
+	"github.com/moto-taka/opencode/internal/history"
+	"github.com/moto-taka/opencode/internal/llm/agent"
+	"github.com/moto-taka/opencode/internal/logging"
+	"github.com/moto-taka/opencode/internal/lsp"
+	"github.com/moto-taka/opencode/internal/message"
+	"github.com/moto-taka/opencode/internal/permission"
+	"github.com/moto-taka/opencode/internal/session"
+	"github.com/moto-taka/opencode/internal/tui/theme"
 )
 
 type App struct {

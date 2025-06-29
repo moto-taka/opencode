@@ -7,16 +7,16 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/opencode-ai/opencode/internal/config"
-	"github.com/opencode-ai/opencode/internal/llm/models"
-	"github.com/opencode-ai/opencode/internal/lsp"
-	"github.com/opencode-ai/opencode/internal/lsp/protocol"
-	"github.com/opencode-ai/opencode/internal/pubsub"
-	"github.com/opencode-ai/opencode/internal/session"
-	"github.com/opencode-ai/opencode/internal/tui/components/chat"
-	"github.com/opencode-ai/opencode/internal/tui/styles"
-	"github.com/opencode-ai/opencode/internal/tui/theme"
-	"github.com/opencode-ai/opencode/internal/tui/util"
+	"github.com/moto-taka/opencode/internal/config"
+	"github.com/moto-taka/opencode/internal/llm/models"
+	"github.com/moto-taka/opencode/internal/lsp"
+	"github.com/moto-taka/opencode/internal/lsp/protocol"
+	"github.com/moto-taka/opencode/internal/pubsub"
+	"github.com/moto-taka/opencode/internal/session"
+	"github.com/moto-taka/opencode/internal/tui/components/chat"
+	"github.com/moto-taka/opencode/internal/tui/styles"
+	"github.com/moto-taka/opencode/internal/tui/theme"
+	"github.com/moto-taka/opencode/internal/tui/util"
 )
 
 type StatusCmp interface {
